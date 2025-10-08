@@ -39,7 +39,7 @@ export const SelectionHeader = ({
     e.stopPropagation();
 
     if (rowsToSelect && rowsToSelect > 0) {
-      await onSelectRows(rowsToSelect);
+       onSelectRows(rowsToSelect);
       overlayRef.current?.hide();
       setOverlayVisible(false);
       setRowsToSelect(null);
@@ -80,12 +80,12 @@ export const SelectionHeader = ({
               onValueChange={(e) => setRowsToSelect(e.value ?? null)}
               min={1}
               max={totalRecords}
-              placeholder="Enter number of rows"
+              placeholder="Select rows..."
               className="w-full"
             />
           </div>
           <Button
-            label="Select Rows"
+            label="Submit"
             onClick={handleSelectRows}
             className="w-full"
             type="button"

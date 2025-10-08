@@ -1,77 +1,114 @@
 import { useState } from "react";
 import type { Artwork } from "../types/artwork";
-import { artworkService } from "../services/artworkService";
 
 export const useArtworkSelection = (
   artworks: Artwork[],
   currentPage: number,
   rowsPerPage: number,
-  totalRecords: number,
+  _totalRecords: number,
   setLoading: (loading: boolean) => void
 ) => {
   const [selectedArtworks, setSelectedArtworks] = useState<Artwork[]>([]);
+  const [selectionConfig, setSelectionConfig] = useState<{
+    totalToSelect: number;
+    startPage: number;
+  } | null>(null);
 
-  /**
-   * Selects multiple rows starting from current page, then proceeds to next/previous pages
-   */
+
   const selectMultipleRows = async (numRows: number) => {
     if (numRows <= 0) return;
 
     setLoading(true);
-    const allSelectedArtworks: Artwork[] = [];
-    let currentPageToFetch = currentPage;
-    let remainingRows = numRows;
-    const totalPages = Math.ceil(totalRecords / rowsPerPage);
 
-    // Forward selection from current page
-    while (remainingRows > 0 && currentPageToFetch <= totalPages) {
-      try {
-        let pageData;
-        if (currentPageToFetch === currentPage) {
-          pageData = artworks; // Use already loaded data
-        } else {
-          const data = await artworkService.fetchArtworks(currentPageToFetch);
-          pageData = data.data;
-        }
+    const config = {
+      totalToSelect: numRows,
+      startPage: currentPage,
+    };
 
-        const rowsToTakeFromPage = Math.min(remainingRows, pageData.length);
-        allSelectedArtworks.push(...pageData.slice(0, rowsToTakeFromPage));
+    setSelectionConfig(config);
 
-        remainingRows -= rowsToTakeFromPage;
-        currentPageToFetch++;
-      } catch (error) {
-        console.error("Error fetching data for selection:", error);
-        break;
-      }
-    }
+    const itemsToSelectOnCurrentPage = Math.min(numRows, artworks.length);
+    const currentPageSelection = artworks.slice(0, itemsToSelectOnCurrentPage);
+    setSelectedArtworks(currentPageSelection);
 
-    // Backward selection if needed
-    if (remainingRows > 0 && currentPage > 1) {
-      currentPageToFetch = currentPage - 1;
-      while (remainingRows > 0 && currentPageToFetch >= 1) {
-        try {
-          const data = await artworkService.fetchArtworks(currentPageToFetch);
-          const rowsToTakeFromPage = Math.min(remainingRows, data.data.length);
-
-          // Add to beginning since we're going backwards
-          allSelectedArtworks.unshift(...data.data.slice(-rowsToTakeFromPage));
-
-          remainingRows -= rowsToTakeFromPage;
-          currentPageToFetch--;
-        } catch (error) {
-          console.error("Error fetching data for selection:", error);
-          break;
-        }
-      }
-    }
-
-    setSelectedArtworks(allSelectedArtworks);
     setLoading(false);
+  };
+
+
+  const handlePageSelection = (pageArtworks: Artwork[], pageNumber: number) => {
+    if (!selectionConfig) return;
+
+    const { totalToSelect, startPage } = selectionConfig;
+
+    const itemsProcessedBefore = (pageNumber - startPage) * rowsPerPage;
+
+    if (itemsProcessedBefore >= totalToSelect) {
+      return;
+    }
+
+    if (pageNumber < startPage) {
+      return;
+    }
+
+    const itemsToSelectOnPage = Math.min(
+      totalToSelect - itemsProcessedBefore,
+      pageArtworks.length
+    );
+
+    if (itemsToSelectOnPage > 0) {
+      const pageSelection = pageArtworks.slice(0, itemsToSelectOnPage);
+
+      setSelectedArtworks((prev) => {
+        const filteredPrev = prev.filter(
+          (artwork) =>
+            !pageArtworks.some((pageArt) => pageArt.id === artwork.id)
+        );
+        return [...filteredPrev, ...pageSelection];
+      });
+    }
+  };
+
+  const clearSelection = () => {
+    setSelectedArtworks([]);
+    setSelectionConfig(null);
+  };
+
+  const toggleArtworkSelection = (artwork: Artwork) => {
+    setSelectedArtworks((prev) => {
+      const isSelected = prev.some((selected) => selected.id === artwork.id);
+      if (isSelected) {
+
+        if (selectionConfig) {
+          setSelectionConfig(null);
+        }
+        return prev.filter((selected) => selected.id !== artwork.id);
+      } else {
+        return [...prev, artwork];
+      }
+    });
+  };
+
+  const isArtworkSelected = (artwork: Artwork) => {
+    return selectedArtworks.some((selected) => selected.id === artwork.id);
+  };
+
+  const handleDataTableSelectionChange = (newSelection: Artwork[]) => {
+
+    if (newSelection.length < selectedArtworks.length && selectionConfig) {
+      setSelectionConfig(null);
+    }
+
+    setSelectedArtworks(newSelection);
   };
 
   return {
     selectedArtworks,
-    setSelectedArtworks,
     selectMultipleRows,
+    clearSelection,
+    toggleArtworkSelection,
+    isArtworkSelected,
+    handlePageSelection,
+    handleDataTableSelectionChange,
+    selectionConfig,
   };
 };

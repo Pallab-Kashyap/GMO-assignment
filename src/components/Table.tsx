@@ -6,9 +6,10 @@ import type { Artwork } from "../types/artwork";
 import { useArtworkData, useArtworkSelection } from "../hooks";
 import { SelectionHeader } from "./SelectionHeader";
 import { COLUMN_WIDTHS } from "../constants/table";
+import { useEffect } from "react";
 
 const Table = () => {
-  // Data management hook
+
   const {
     artworks,
     loading,
@@ -19,21 +20,32 @@ const Table = () => {
     setLoading,
   } = useArtworkData();
 
-  // Selection logic hook
-  const { selectedArtworks, setSelectedArtworks, selectMultipleRows } =
-    useArtworkSelection(
-      artworks,
-      currentPage,
-      rowsPerPage,
-      totalRecords,
-      setLoading
-    );
+
+  const {
+    selectedArtworks,
+    selectMultipleRows,
+    handlePageSelection,
+    handleDataTableSelectionChange,
+  } = useArtworkSelection(
+    artworks,
+    currentPage,
+    rowsPerPage,
+    totalRecords,
+    setLoading
+  );
 
   const onPageChange = (event: PaginatorPageChangeEvent) => {
     const page = Math.floor(event.first / event.rows) + 1;
     window.scrollTo({ top: 0, behavior: "smooth" }); // Smooth scroll to top
     loadData(page);
   };
+
+  // Apply lazy selection when artworks data changes
+  useEffect(() => {
+    if (artworks.length > 0) {
+      handlePageSelection(artworks, currentPage);
+    }
+  }, [artworks, currentPage, handlePageSelection]);
 
   return (
     <div className="relative m-4 md:m-6 lg:m-8">
@@ -42,7 +54,10 @@ const Table = () => {
         loading={loading}
         emptyMessage="No artworks found"
         selection={selectedArtworks}
-        onSelectionChange={(e) => setSelectedArtworks(e.value as Artwork[])}
+        onSelectionChange={(e) => {
+          const newSelection = e.value as Artwork[];
+          handleDataTableSelectionChange(newSelection);
+        }}
         dataKey="id"
         selectionMode="multiple"
       >
