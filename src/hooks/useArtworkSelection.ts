@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import type { Artwork } from "../types/artwork";
 
 export const useArtworkSelection = (
@@ -13,7 +13,9 @@ export const useArtworkSelection = (
     totalToSelect: number;
     startPage: number;
   } | null>(null);
-
+  const [manuallyModifiedPages, setManuallyModifiedPages] = useState<
+    Set<number>
+  >(new Set());
 
   const selectMultipleRows = async (numRows: number) => {
     if (numRows <= 0) return;
@@ -26,6 +28,7 @@ export const useArtworkSelection = (
     };
 
     setSelectionConfig(config);
+    setManuallyModifiedPages(new Set());
 
     const itemsToSelectOnCurrentPage = Math.min(numRows, artworks.length);
     const currentPageSelection = artworks.slice(0, itemsToSelectOnCurrentPage);
@@ -34,53 +37,54 @@ export const useArtworkSelection = (
     setLoading(false);
   };
 
+  const handlePageSelection = useCallback(
+    (pageArtworks: Artwork[], pageNumber: number) => {
+      if (!selectionConfig) return;
 
-  const handlePageSelection = (pageArtworks: Artwork[], pageNumber: number) => {
-    if (!selectionConfig) return;
+      if (manuallyModifiedPages.has(pageNumber)) return;
 
-    const { totalToSelect, startPage } = selectionConfig;
+      const { totalToSelect, startPage } = selectionConfig;
+      const itemsProcessedBefore = (pageNumber - startPage) * rowsPerPage;
 
-    const itemsProcessedBefore = (pageNumber - startPage) * rowsPerPage;
+      if (itemsProcessedBefore >= totalToSelect) return;
+      if (pageNumber < startPage) return;
 
-    if (itemsProcessedBefore >= totalToSelect) {
-      return;
-    }
+      const itemsToSelectOnPage = Math.min(
+        totalToSelect - itemsProcessedBefore,
+        pageArtworks.length
+      );
 
-    if (pageNumber < startPage) {
-      return;
-    }
+      if (itemsToSelectOnPage > 0) {
+        const pageSelection = pageArtworks.slice(0, itemsToSelectOnPage);
 
-    const itemsToSelectOnPage = Math.min(
-      totalToSelect - itemsProcessedBefore,
-      pageArtworks.length
-    );
-
-    if (itemsToSelectOnPage > 0) {
-      const pageSelection = pageArtworks.slice(0, itemsToSelectOnPage);
-
-      setSelectedArtworks((prev) => {
-        const filteredPrev = prev.filter(
-          (artwork) =>
-            !pageArtworks.some((pageArt) => pageArt.id === artwork.id)
-        );
-        return [...filteredPrev, ...pageSelection];
-      });
-    }
-  };
+        setSelectedArtworks((prev) => {
+          const filteredPrev = prev.filter(
+            (artwork) =>
+              !pageArtworks.some((pageArt) => pageArt.id === artwork.id)
+          );
+          return [...filteredPrev, ...pageSelection];
+        });
+      }
+    },
+    [selectionConfig, rowsPerPage, manuallyModifiedPages]
+  );
 
   const clearSelection = () => {
     setSelectedArtworks([]);
     setSelectionConfig(null);
+    setManuallyModifiedPages(new Set());
   };
 
   const toggleArtworkSelection = (artwork: Artwork) => {
+
+    if (selectionConfig) {
+      setSelectionConfig(null);
+    }
+
     setSelectedArtworks((prev) => {
       const isSelected = prev.some((selected) => selected.id === artwork.id);
-      if (isSelected) {
 
-        if (selectionConfig) {
-          setSelectionConfig(null);
-        }
+      if (isSelected) {
         return prev.filter((selected) => selected.id !== artwork.id);
       } else {
         return [...prev, artwork];
@@ -92,14 +96,45 @@ export const useArtworkSelection = (
     return selectedArtworks.some((selected) => selected.id === artwork.id);
   };
 
-  const handleDataTableSelectionChange = (newSelection: Artwork[]) => {
+  const handleDataTableSelectionChange = useCallback(
+    (newSelection: Artwork[]) => {
 
-    if (newSelection.length < selectedArtworks.length && selectionConfig) {
-      setSelectionConfig(null);
-    }
+      const currentPageIds = artworks.map((artwork) => artwork.id);
 
-    setSelectedArtworks(newSelection);
-  };
+      const selectionsFromOtherPages = selectedArtworks.filter(
+        (artwork) => !currentPageIds.includes(artwork.id)
+      );
+
+      const newSelectionFromCurrentPage = newSelection.filter((artwork) =>
+        currentPageIds.includes(artwork.id)
+      );
+
+      if (selectionConfig) {
+        const currentPageSelected = selectedArtworks.filter((artwork) =>
+          currentPageIds.includes(artwork.id)
+        );
+
+        if (
+          currentPageSelected.length !== newSelectionFromCurrentPage.length ||
+          currentPageSelected.some(
+            (artwork) =>
+              !newSelectionFromCurrentPage.find(
+                (selected) => selected.id === artwork.id
+              )
+          )
+        ) {
+          setManuallyModifiedPages((prev) => new Set(prev).add(currentPage));
+        }
+      }
+
+      const finalSelection = [
+        ...selectionsFromOtherPages,
+        ...newSelectionFromCurrentPage,
+      ];
+      setSelectedArtworks(finalSelection);
+    },
+    [artworks, selectedArtworks, selectionConfig, currentPage]
+  );
 
   return {
     selectedArtworks,
